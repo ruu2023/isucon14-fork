@@ -5,7 +5,7 @@ services:
       ENV: local-dev
       MYSQL_ROOT_PASSWORD: isucon
     ports:
-      - 3306:3306
+      - 13306:3306
     volumes:
       - ../webapp/sql:/docker-entrypoint-initdb.d
     healthcheck:

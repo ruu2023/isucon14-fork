@@ -1,5 +1,18 @@
 # ISUCON14 問題
 
+## ローカル用起動手順
+
+競技環境などを用意していない人向けの、ローカルでアプリケーションを動かすだけの最短手順です。事前に[Task](https://taskfile.dev/)とDocker(Docker Compose)が必要です。
+
+```bash
+cd development
+docker compose -f compose-node.yml up -d --build
+
+ベンチ実行は:
+cd bench
+task run-local-docker
+```
+
 ## 当日に公開したマニュアルおよびアプリケーションについての説明
 
 - [ISUCON14 当日マニュアル](./docs/manual.md)
@@ -38,6 +51,7 @@ ISUCON14で使用したTLS証明書は`provisioning/ansible/roles/nginx/files/et
 ### 用意されたAMIを利用する場合
 
 以下の設定で起動してください。このAMIは予告なく利用できなくなる可能性があります。
+
 - リージョン: `ap-northeast-1`
 - AMI-ID: `ami-0e334c50145a3ee41`
 
@@ -93,6 +107,7 @@ $ ansible-playbook -i inventory/localhost benchmark.yml
 [Task](https://taskfile.dev/)を使用するので、事前にインストールしておいてください。
 
 ### アプリケーションの起動
+
 ```
 $ task up
 $ task go:run
@@ -101,12 +116,14 @@ $ task go:run
 ### 負荷走行の実行
 
 同一サーバー内でアプリケーションを起動している場合は、以下のコマンドで負荷走行を実行できます。
+
 ```
 $ cd bench
 $ task run-local
 ```
 
 異なるホストに向けて負荷走行を行う場合は、以下のようなコマンドで負荷走行を実行できます。
+
 ```
 $ cd bench
 $ go run . run --target http://{{ 対象のIPアドレス }}:{{ 対象のポート番号 }} --payment-url http://{{ 対象のホストから見たベンチマーカーのIPアドレス }}:{{ 決済サーバーのポート番号 デフォルト:12345 }} -t 60

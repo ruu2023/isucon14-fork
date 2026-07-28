@@ -4,6 +4,10 @@ tasks:
   run-local:
     cmds:
       - go run . run --target http://localhost:8080 -t 60 {{.CLI_ARGS}}
+  run-local-docker:
+    desc: "Use when the target webapp runs inside development/compose-node.yml (container can't reach the host's localhost)"
+    cmds:
+      - go run . run --target http://localhost:8080 --payment-url http://host.docker.internal:12345 -t 60 {{.CLI_ARGS}}
   build:
     cmds:
       - go build -ldflags "-s -w"

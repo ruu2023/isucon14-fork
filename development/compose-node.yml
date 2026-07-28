@@ -1,14 +1,23 @@
 services:
+  frontend:
+    build:
+      context: ..
+      dockerfile: development/dockerfiles/Dockerfile.frontend
+    volumes:
+      - frontend-build:/output
   nginx:
     image: public.ecr.aws/docker/library/nginx:latest
     container_name: nginx
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ../frontend/build/client:/home/isucon/webapp/public:ro
+      - frontend-build:/home/isucon/webapp/public:ro
     ports:
       - "8080:80"
     depends_on:
-      - webapp
+      webapp:
+        condition: service_started
+      frontend:
+        condition: service_completed_successfully
   webapp:
     build:
       context: ../webapp/nodejs
@@ -45,3 +54,6 @@ services:
   matcher:
     image: mirror.gcr.io/curlimages/curl:latest
     command: /bin/sh -c "while true; do curl -s http://nginx/api/internal/matching; sleep 0.5; done"
+
+volumes:
+  frontend-build:

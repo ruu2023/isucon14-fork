@@ -12,7 +12,7 @@ if [ "$CURRENT_SCORE" -ge "$TARGET_SCORE" ]; then
   exit 0
 fi
 
-for candidate in matcher-batch-size-5 matcher-batch-size-20; do
+for candidate in matcher-batch-size-1 matcher-batch-size-5 matcher-batch-size-10 matcher-batch-size-20 matcher-batch-size-50; do
   if ! grep -Fxq "$candidate" "$STATE_DIR/tried" 2>/dev/null; then
     echo "$candidate"
     exit 0

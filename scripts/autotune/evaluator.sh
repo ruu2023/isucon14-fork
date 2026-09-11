@@ -10,7 +10,10 @@ if [ "$candidate" = "payment-check-retry" ]; then
   exit 0
 fi
 
-./webapp/nodejs/node_modules/.bin/tsc --noEmit
+(
+  cd webapp/nodejs
+  ./node_modules/.bin/tsc --noEmit
+)
 git add webapp/nodejs/src/internal_handlers.ts
 git commit -m "perf: tune matcher batch size ($candidate)"
 ./scripts/deploy.sh

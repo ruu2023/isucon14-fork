@@ -1,37 +1,37 @@
-import { ulid } from "ulid";
 import type { Context } from "hono";
-import type { Environment } from "./types/hono.js";
-import { secureRandomStr } from "./utils/random.js";
+import { setCookie } from "hono/cookie";
 import type {
+  Connection,
   ResultSetHeader,
   RowDataPacket,
-  Connection,
 } from "mysql2/promise";
+import { ulid } from "ulid";
+import {
+  ErroredUpstream,
+  FARE_PER_DISTANCE,
+  INITIAL_FARE,
+  calculateDistance,
+  calculateFare,
+  getLatestRideStatus,
+} from "./common.js";
+import { pool } from "./db.js";
+import { matchOnce } from "./internal_handlers.js";
+import { requestPaymentGatewayPostPayment } from "./payment_gateway.js";
+import type { Environment } from "./types/hono.js";
 import type {
-  PaymentToken,
   Chair,
+  ChairLocation,
   Coordinate,
   Coupon,
   Owner,
+  PaymentToken,
   Ride,
   RideStatus,
   User,
-  ChairLocation,
 } from "./types/models.js";
-import { setCookie } from "hono/cookie";
-import {
-  calculateDistance,
-  calculateFare,
-  ErroredUpstream,
-  FARE_PER_DISTANCE,
-  getLatestRideStatus,
-  INITIAL_FARE,
-} from "./common.js";
 import type { CountResult } from "./types/util.js";
-import { requestPaymentGatewayPostPayment } from "./payment_gateway.js";
 import { atoi } from "./utils/integer.js";
-import { matchOnce } from "./internal_handlers.js";
-import { pool } from "./db.js";
+import { secureRandomStr } from "./utils/random.js";
 
 type AppPostUserRequest = Readonly<{
   username: string;
@@ -629,15 +629,27 @@ async function getChairStats(
     "SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC",
     [chairId],
   );
+  const rideStatusesByRideId = new Map<
+    string,
+    Array<RideStatus & RowDataPacket>
+  >();
+  if (rides.length > 0) {
+    const [rideStatuses] = await dbConn.query<
+      Array<RideStatus & RowDataPacket>
+    >("SELECT * FROM ride_statuses WHERE ride_id IN (?) ORDER BY created_at", [
+      rides.map((ride) => ride.id),
+    ]);
+    for (const rideStatus of rideStatuses) {
+      const statuses = rideStatusesByRideId.get(rideStatus.ride_id) ?? [];
+      statuses.push(rideStatus);
+      rideStatusesByRideId.set(rideStatus.ride_id, statuses);
+    }
+  }
 
   let totalRidesCount = 0;
   let totalEvaluation = 0.0;
   for (const ride of rides) {
-    const [rideStatuses] = await dbConn.query<
-      Array<RideStatus & RowDataPacket>
-    >("SELECT * FROM ride_statuses WHERE ride_id = ? ORDER BY created_at", [
-      ride.id,
-    ]);
+    const rideStatuses = rideStatusesByRideId.get(ride.id) ?? [];
     let arrivedAt: Date | undefined;
     let pickupedAt: Date | undefined;
     let isCompleted = false;

@@ -11,6 +11,36 @@ docker compose -f compose-node.yml up -d --build
 ベンチ実行は:
 cd bench
 task run-local-docker
+
+決済モックを含めてNode.js版をローカルで動かす場合は、Composeを2枚重ねて起動します。
+
+```bash
+cd development
+docker compose -f compose-node.yml -f compose-node.local.yml up -d --build
+curl -X POST http://localhost:8080/api/initialize \
+  -H 'Content-Type: application/json' \
+  -d '{"payment_server":"http://host.docker.internal:12345"}'
+
+cd ../bench
+task run-local-docker
+```
+
+`compose-node.yml` はリモート検証用と共用し、決済モックの追加は `compose-node.local.yml` に分離しています。これでコード変更後はローカルで型チェックとベンチを回し、最後だけリモートで確認できます。
+```
+
+## mprocs でのリモート操作
+
+[mprocs](https://github.com/pvolok/mprocs) をインストールすると、リモート環境のログ、デプロイ、ベンチマーク、状態確認、SSH を1つの画面から操作できます。
+
+```bash
+brew install mprocs
+mprocs
+```
+
+起動時は `logs` だけが自動実行されます。`deploy`、`bench`、`ps`、`ssh` は対象を選択して `s` キーで実行してください。接続先などは既存の `Makefile` と同様に環境変数で変更できます。
+
+```bash
+REMOTE_HOST=user@example.com REMOTE_DIR=/path/to/isucon14 mprocs
 ```
 
 ## 当日に公開したマニュアルおよびアプリケーションについての説明

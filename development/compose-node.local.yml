@@ -1,0 +1,9 @@
+services:
+  db:
+    ports:
+      - "3307:3306"
+  paymentmock:
+    build:
+      context: ../webapp/payment_mock
+    ports:
+      - "12345:12345"

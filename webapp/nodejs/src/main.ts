@@ -1,6 +1,8 @@
 import { serve } from "@hono/node-server";
 import { Hono, type Context } from "hono";
 import { createMiddleware } from "hono/factory";
+import { pool } from "./db.js";
+import { execSync } from "node:child_process";
 import {
   appGetNearbyChairs,
   appGetNotification,
@@ -18,6 +20,7 @@ import {
   chairPostCoordinate,
   chairPostRideStatus,
 } from "./chair_handlers.js";
+import { internalGetMatching } from "./internal_handlers.js";
 import {
   appAuthMiddleware,
   chairAuthMiddleware,
@@ -29,22 +32,8 @@ import {
   ownerPostOwners,
 } from "./owner_handlers.js";
 import type { Environment } from "./types/hono.js";
-import { execSync } from "node:child_process";
-import { internalGetMatching } from "./internal_handlers.js";
-import { createPool } from "mysql2/promise";
-import { logger } from "hono/logger";
-
-const pool = createPool({
-  host: process.env.ISUCON_DB_HOST || "127.0.0.1",
-  port: Number(process.env.ISUCON_DB_PORT || "3306"),
-  user: process.env.ISUCON_DB_USER || "isucon",
-  password: process.env.ISUCON_DB_PASSWORD || "isucon",
-  database: process.env.ISUCON_DB_NAME || "isuride",
-  timezone: "+00:00",
-});
 
 const app = new Hono<Environment>();
-app.use(logger());
 app.use(
   createMiddleware<Environment>(async (ctx, next) => {
     const connection = await pool.getConnection();
@@ -105,14 +94,24 @@ serve(
   {
     fetch: app.fetch,
     port,
+    hostname: "0.0.0.0",
   },
   (addr) => {
-    console.log(`Server is running on http://localhost:${addr.port}`);
+    console.log(`Server is running on http://${addr.address}:${addr.port}`);
   },
 );
 
 async function postInitialize(ctx: Context<Environment>) {
-  const body = await ctx.req.json<{ payment_server: string }>();
+  let paymentServer = "";
+  try {
+    const body = await ctx.req.json<{ payment_server?: string }>();
+    if (body?.payment_server) {
+      paymentServer = body.payment_server;
+    }
+  } catch {
+    // Body is empty or non-JSON
+  }
+
   try {
     execSync("../sql/init.sh", { stdio: "inherit" });
   } catch (error) {
@@ -121,7 +120,7 @@ async function postInitialize(ctx: Context<Environment>) {
   try {
     await ctx.var.dbConn.query(
       "UPDATE settings SET value = ? WHERE name = 'payment_gateway_url'",
-      [body.payment_server],
+      [paymentServer],
     );
   } catch (error) {
     return ctx.text(`Internal Server Error\n${error}`, 500);

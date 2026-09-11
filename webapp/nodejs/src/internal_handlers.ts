@@ -1,44 +1,86 @@
 import type { Context } from "hono";
-import type { Environment } from "./types/hono.js";
 import type { RowDataPacket } from "mysql2";
+import type { PoolConnection } from "mysql2/promise";
+import type { Environment } from "./types/hono.js";
 import type { Chair, Ride } from "./types/models.js";
 
 // このAPIをインスタンス内から一定間隔で叩かせることで、椅子とライドをマッチングさせる
-export const internalGetMatching = async (ctx: Context<Environment>) => {
-  // MEMO: 一旦最も待たせているリクエストに適当な空いている椅子マッチさせる実装とする。おそらくもっといい方法があるはず…
-  const [[ride]] = await ctx.var.dbConn.query<Array<Ride & RowDataPacket>>(
-    "SELECT * FROM rides WHERE chair_id IS NULL ORDER BY created_at LIMIT 1",
+export const matchOnce = async (dbConn: PoolConnection) => {
+  // 待機時間が長いライドから最大10件取得する
+  const [rides] = await dbConn.query<
+    Array<Ride & RowDataPacket>
+  >(
+    "SELECT * FROM rides WHERE chair_id IS NULL ORDER BY created_at LIMIT 10",
   );
-  if (!ride) {
-    return ctx.body(null, 204);
+
+  if (rides.length === 0) {
+    return;
   }
-  let matched!: Chair & RowDataPacket;
-  let empty = false;
-  for (let i = 0; i < 10; i++) {
-    [[matched]] = await ctx.var.dbConn.query<Array<Chair & RowDataPacket>>(
-      "SELECT * FROM chairs INNER JOIN (SELECT id FROM chairs WHERE is_active = TRUE ORDER BY RAND() LIMIT 1) AS tmp ON chairs.id = tmp.id LIMIT 1",
-    );
-    if (!matched) {
-      return ctx.body(null, 204);
-    }
-    const [[result]] = await ctx.var.dbConn.query<
-      Array<{ "COUNT(*) = 0": number } & RowDataPacket>
+
+  for (const ride of rides) {
+    // アクティブかつ利用可能な椅子のうち、
+    // ライドの乗車地点に最も近い椅子を1台取得する
+    const [[matched]] = await dbConn.query<
+      Array<Chair & { distance: number } & RowDataPacket>
     >(
-      "SELECT COUNT(*) = 0 FROM (SELECT COUNT(chair_sent_at) = 6 AS completed FROM ride_statuses WHERE ride_id IN (SELECT id FROM rides WHERE chair_id = ?) GROUP BY ride_id) is_completed WHERE completed = FALSE",
-      [matched.id],
+      `
+        SELECT
+          c.*,
+          ABS(cl.latitude - ?)
+            + ABS(cl.longitude - ?) AS distance
+        FROM chairs AS c
+        INNER JOIN chair_locations AS cl
+          ON cl.id = (
+            SELECT cl2.id
+            FROM chair_locations AS cl2
+            WHERE cl2.chair_id = c.id
+            ORDER BY cl2.created_at DESC
+            LIMIT 1
+          )
+        WHERE c.is_active = TRUE
+          AND NOT EXISTS (
+            SELECT 1
+            FROM rides AS assigned_ride
+            WHERE assigned_ride.chair_id = c.id
+              AND (
+                NOT EXISTS (
+                  SELECT 1
+                  FROM ride_statuses AS completed_status
+                  WHERE completed_status.ride_id = assigned_ride.id
+                    AND completed_status.status = 'COMPLETED'
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM ride_statuses AS unsent_status
+                  WHERE unsent_status.ride_id = assigned_ride.id
+                    AND unsent_status.chair_sent_at IS NULL
+                )
+              )
+          )
+        ORDER BY distance, c.id
+        LIMIT 1
+      `,
+      [ride.pickup_latitude, ride.pickup_longitude],
     );
-    empty = !!result["COUNT(*) = 0"];
-    if (empty) {
+
+    // 利用可能な椅子がなければ、後続ライドにも割り当てられない
+    if (!matched) {
       break;
     }
-  }
-  if (!empty) {
-    return ctx.body(null, 204);
-  }
-  await ctx.var.dbConn.query("UPDATE rides SET chair_id = ? WHERE id = ?", [
-    matched.id,
-    ride.id,
-  ]);
 
+    await dbConn.query(
+      "UPDATE rides SET chair_id = ? WHERE id = ?",
+      [matched.id, ride.id],
+    );
+  }
+
+  return;
+};
+
+
+export const internalGetMatching = async (
+  ctx: Context<Environment>,
+) => {
+  await matchOnce(ctx.var.dbConn);
   return ctx.body(null, 204);
 };

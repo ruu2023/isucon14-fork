@@ -30,6 +30,8 @@ import {
 import type { CountResult } from "./types/util.js";
 import { requestPaymentGatewayPostPayment } from "./payment_gateway.js";
 import { atoi } from "./utils/integer.js";
+import { matchOnce } from "./internal_handlers.js";
+import { pool } from "./db.js";
 
 type AppPostUserRequest = Readonly<{
   username: string;
@@ -330,6 +332,9 @@ export const appPostRides = async (ctx: Context<Environment>) => {
       reqJson.destination_coordinate.longitude,
     );
     await ctx.var.dbConn.commit();
+
+    // FIXME:調整中
+    requestMatching();
     return ctx.json(
       {
         ride_id: rideId,
@@ -342,6 +347,32 @@ export const appPostRides = async (ctx: Context<Environment>) => {
     return ctx.text(`${e}`, 500);
   }
 };
+
+let running = false;
+let requested = false;
+async function requestMatching() {
+  requested = true;
+
+  if (running) return;
+  running = true;
+
+  try {
+    while (requested) {
+      requested = false;
+
+      const connection = await pool.getConnection();
+      try {
+        await matchOnce(connection);
+      } finally {
+        connection.release();
+      }
+    }
+  } catch (error) {
+    console.error("event-driven matching failed", error);
+  } finally {
+    running = false;
+  }
+}
 
 export const appPostRidesEstimatedFare = async (ctx: Context<Environment>) => {
   const reqJson = await ctx.req.json<{
@@ -460,9 +491,14 @@ export const appPostRideEvaluatation = async (ctx: Context<Environment>) => {
       },
     );
     if (err instanceof ErroredUpstream) {
+      console.error("payment gateway inconsistency", {
+        rideId,
+        message: err.message,
+      });
       return ctx.text(`${err}`, 502);
     }
     await ctx.var.dbConn.commit();
+    requestMatching();
     return ctx.json(
       {
         completed_at: ride.updated_at.getTime(),

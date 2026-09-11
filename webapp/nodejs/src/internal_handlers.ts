@@ -10,7 +10,7 @@ export const matchOnce = async (dbConn: PoolConnection) => {
   const [rides] = await dbConn.query<
     Array<Ride & RowDataPacket>
   >(
-    "SELECT * FROM rides WHERE chair_id IS NULL ORDER BY created_at LIMIT 20",
+    "SELECT * FROM rides WHERE chair_id IS NULL ORDER BY created_at LIMIT 5",
   );
 
   if (rides.length === 0) {

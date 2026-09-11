@@ -10,7 +10,6 @@ import type {
   Owner,
   Ride,
   RideStatus,
-  User,
 } from "./types/models.js";
 import { secureRandomStr } from "./utils/random.js";
 
@@ -115,8 +114,16 @@ export const chairGetNotification = async (ctx: Context<Environment>) => {
 
   await ctx.var.dbConn.beginTransaction();
   try {
-    const [[ride]] = await ctx.var.dbConn.query<Array<Ride & RowDataPacket>>(
-      "SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1",
+    const [[ride]] = await ctx.var.dbConn.query<
+      Array<
+        Ride & {
+          joined_user_id: string | null;
+          user_firstname: string | null;
+          user_lastname: string | null;
+        } & RowDataPacket
+      >
+    >(
+      "SELECT rides.*, users.id AS joined_user_id, users.firstname AS user_firstname, users.lastname AS user_lastname FROM rides LEFT JOIN users ON users.id = rides.user_id WHERE rides.chair_id = ? ORDER BY rides.updated_at DESC LIMIT 1",
       [chair.id],
     );
     if (!ride) {
@@ -133,10 +140,9 @@ export const chairGetNotification = async (ctx: Context<Environment>) => {
       ? yetSentRideStatus.status
       : await getLatestRideStatus(ctx.var.dbConn, ride.id);
 
-    const [[user]] = await ctx.var.dbConn.query<Array<User & RowDataPacket>>(
-      "SELECT * FROM users WHERE id = ? FOR SHARE",
-      [ride.user_id],
-    );
+    if (ride.joined_user_id === null) {
+      throw new Error("user not found");
+    }
 
     if (yetSentRideStatus?.id) {
       await ctx.var.dbConn.query(
@@ -151,8 +157,8 @@ export const chairGetNotification = async (ctx: Context<Environment>) => {
         data: {
           ride_id: ride.id,
           user: {
-            id: user.id,
-            name: `${user.firstname} ${user.lastname}`,
+            id: ride.joined_user_id,
+            name: `${ride.user_firstname} ${ride.user_lastname}`,
           },
           pickup_coordinate: {
             latitude: ride.pickup_latitude,

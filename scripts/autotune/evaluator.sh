@@ -17,7 +17,7 @@ fi
 git add webapp/nodejs/src/internal_handlers.ts
 git commit -m "perf: tune matcher batch size ($candidate)"
 ./scripts/deploy.sh
-./scripts/bench.sh | tee "$STATE_DIR/$candidate.log"
+./scripts/bench.sh 2>&1 | tee "$STATE_DIR/$candidate.log"
 score=$(sed -n 's/.*結果 pass=.*スコア=\([0-9][0-9]*\).*/\1/p' "$STATE_DIR/$candidate.log" | tail -1)
 errors=$(sed -n 's/.*種別エラー数=\(.*\)$/\1/p' "$STATE_DIR/$candidate.log" | tail -1)
 printf '%s\t%s\t%s\n' "$candidate" "${score:-0}" "${errors:-unknown}" >> "$STATE_DIR/results.tsv"

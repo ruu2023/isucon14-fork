@@ -28,26 +28,32 @@ export const requestPaymentGatewayPostPayment = async (
 
       if (res.status !== 204) {
         // エラーが返ってきても成功している場合があるので、社内決済マイクロサービスに問い合わせ
-        const getRes = await fetch(`${paymentGatewayURL}/payments`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        // 決済ゲートウェイ側の反映遅延を考慮し、POSTは再送せずGETだけ確認する
+        for (let checkRetry = 0; checkRetry < 5; checkRetry++) {
+          const getRes = await fetch(`${paymentGatewayURL}/payments`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
 
-        // GET /payments は障害と関係なく200が返るので、200以外は回復不能なエラーとする
-        if (getRes.status !== 200) {
-          return new Error(
-            `[GET /payments] unexpected status code (${getRes.status})`,
-          );
-        }
-        const payments = await getRes.json();
-
-        const rides = await retrieveRidesOrderByCreatedAtAsc();
-        if (rides.length !== payments.length) {
-          return new ErroredUpstream(
-            `unexpected number of payments: ${rides.length} != ${payments.length}`,
-          );
+          // GET /payments は障害と関係なく200が返るので、200以外は回復不能なエラーとする
+          if (getRes.status !== 200) {
+            return new Error(
+              `[GET /payments] unexpected status code (${getRes.status})`,
+            );
+          }
+          const payments = await getRes.json();
+          const rides = await retrieveRidesOrderByCreatedAtAsc();
+          if (rides.length === payments.length) {
+            break;
+          }
+          if (checkRetry === 4) {
+            return new ErroredUpstream(
+              `unexpected number of payments: ${rides.length} != ${payments.length}`,
+            );
+          }
+          await setTimeout(100);
         }
       }
       break;

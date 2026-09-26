@@ -16,6 +16,7 @@ import {
 } from "./common.js";
 import { pool } from "./db.js";
 import { matchOnce } from "./internal_handlers.js";
+import { measurePaymentOperation } from "./payment_diagnostics.js";
 import { requestPaymentGatewayPostPayment } from "./payment_gateway.js";
 import type { Environment } from "./types/hono.js";
 import type {
@@ -417,7 +418,7 @@ export const appPostRidesEstimatedFare = async (ctx: Context<Environment>) => {
   }
 };
 
-export const appPostRideEvaluatation = async (ctx: Context<Environment>) => {
+const appPostRideEvaluatationImpl = async (ctx: Context<Environment>) => {
   const rideId = ctx.req.param("ride_id");
   const reqJson = await ctx.req.json<{ evaluation: number }>();
   if (reqJson.evaluation < 1 || reqJson.evaluation > 5) {
@@ -464,14 +465,16 @@ export const appPostRideEvaluatation = async (ctx: Context<Environment>) => {
     if (!paymentToken) {
       return ctx.text("payment token not registered", 400);
     }
-    const fare = await calculateDiscountedFare(
-      ctx.var.dbConn,
-      ride.user_id,
-      ride,
-      ride.pickup_latitude,
-      ride.pickup_longitude,
-      ride.destination_latitude,
-      ride.destination_longitude,
+    const fare = await measurePaymentOperation("fare_calculation", () =>
+      calculateDiscountedFare(
+        ctx.var.dbConn,
+        ride.user_id,
+        ride,
+        ride.pickup_latitude,
+        ride.pickup_longitude,
+        ride.destination_latitude,
+        ride.destination_longitude,
+      ),
     );
     const paymentGatewayRequest = { amount: fare };
 
@@ -510,6 +513,11 @@ export const appPostRideEvaluatation = async (ctx: Context<Environment>) => {
     return ctx.text(`${err}`, 500);
   }
 };
+
+export const appPostRideEvaluatation = (ctx: Context<Environment>) =>
+  measurePaymentOperation("evaluation_handler", () =>
+    appPostRideEvaluatationImpl(ctx),
+  );
 
 type AppGetNotificationResponseData = {
   ride_id: string;
@@ -668,7 +676,6 @@ async function getChairStats(
       if (!isCompleted) {
         continue;
       }
-
       totalRidesCount++;
       totalEvaluation += ride.evaluation ?? 0;
     }

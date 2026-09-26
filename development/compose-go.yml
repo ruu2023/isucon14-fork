@@ -4,6 +4,7 @@ services:
     container_name: nginx
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/logs:/var/log/nginx
       - ../frontend/build/client:/home/isucon/webapp/public:ro
     ports:
       - "8080:80"

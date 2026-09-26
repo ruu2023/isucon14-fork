@@ -1,8 +1,7 @@
-import { serve } from "@hono/node-server";
-import { Hono, type Context } from "hono";
-import { createMiddleware } from "hono/factory";
-import { pool } from "./db.js";
 import { execSync } from "node:child_process";
+import { serve } from "@hono/node-server";
+import { type Context, Hono } from "hono";
+import { createMiddleware } from "hono/factory";
 import {
   appGetNearbyChairs,
   appGetNotification,
@@ -20,6 +19,7 @@ import {
   chairPostCoordinate,
   chairPostRideStatus,
 } from "./chair_handlers.js";
+import { pool } from "./db.js";
 import { internalGetMatching } from "./internal_handlers.js";
 import {
   appAuthMiddleware,

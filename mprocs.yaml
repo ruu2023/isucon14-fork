@@ -1,0 +1,15 @@
+procs:
+  logs:
+    shell: "make logs"
+  deploy:
+    shell: "make deploy"
+    autostart: false
+  bench:
+    shell: "make bench"
+    autostart: false
+  ps:
+    shell: "make ps"
+    autostart: false
+  ssh:
+    shell: "make ssh"
+    autostart: false

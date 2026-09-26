@@ -1,0 +1,46 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "ISUCON14 Matcher: 定期巡回からイベント駆動へ",
+    "quality_profile": "showcase",
+    "visual_preset": "signal-flow",
+    "animation": "none"
+  },
+  "lanes": [
+    { "id": "app", "label": "アプリケーション" },
+    { "id": "matcher", "label": "Matcher" },
+    { "id": "data", "label": "DB" },
+    { "id": "fallback", "label": "復旧" }
+  ],
+  "phases": [
+    { "id": "request", "label": "依頼受付", "fromCol": 0, "toCol": 1 },
+    { "id": "dispatch", "label": "起動と処理", "fromCol": 2, "toCol": 4, "variant": "emphasis" },
+    { "id": "recovery", "label": "取りこぼし対策", "fromCol": 5, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["ride", "commit", "signal", "gate", "match", "assign"],
+  "nodes": [
+    { "id": "ride", "lane": "app", "col": 0, "type": "frontend", "label": "ライド作成", "sublabel": "INSERT rides + MATCHING", "width": 132 },
+    { "id": "commit", "lane": "data", "col": 1, "type": "database", "label": "COMMIT", "sublabel": "依頼を確定", "width": 132 },
+    { "id": "signal", "lane": "app", "col": 2, "type": "messagebus", "label": "実行要求", "sublabel": "requestMatching()", "tag": "イベント", "width": 132 },
+    { "id": "gate", "lane": "matcher", "col": 3, "type": "security", "label": "実行制御", "sublabel": "running / requested", "width": 132 },
+    { "id": "match", "lane": "matcher", "col": 4, "type": "backend", "label": "matchOnce", "sublabel": "最大10件を処理", "width": 132 },
+    { "id": "assign", "lane": "data", "col": 5, "type": "database", "label": "椅子を割り当て", "sublabel": "UPDATE rides", "width": 132 },
+    { "id": "again", "lane": "fallback", "col": 4, "type": "messagebus", "label": "再要求", "sublabel": "実行中に届いたイベント", "width": 132 },
+    { "id": "poll", "lane": "fallback", "col": 5, "type": "backend", "label": "低頻度巡回", "sublabel": "再起動・取りこぼし対策", "width": 132 }
+  ],
+  "edges": [
+    { "id": "ride-commit", "from": "ride", "to": "commit", "label": "トランザクション", "variant": "default" },
+    { "id": "commit-signal", "from": "commit", "to": "signal", "label": "確定後に通知", "variant": "emphasis" },
+    { "id": "signal-gate", "from": "signal", "to": "gate", "variant": "emphasis" },
+    { "id": "gate-match", "from": "gate", "to": "match", "label": "1本だけ実行", "variant": "emphasis" },
+    { "id": "match-assign", "from": "match", "to": "assign", "label": "近い空き椅子", "variant": "emphasis" },
+    { "id": "signal-again", "from": "signal", "to": "again", "label": "実行中なら記録", "variant": "dashed", "role": "branch" },
+    { "id": "again-match", "from": "again", "to": "match", "label": "処理後に再実行", "variant": "dashed", "role": "return" },
+    { "id": "poll-match", "from": "poll", "to": "match", "label": "復旧用", "variant": "dashed", "role": "return" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "今日の変更", "items": ["定期巡回を停止", "COMMIT後にMatcherを起動", "DB接続は専用に借りて返却"] },
+    { "dot": "amber", "title": "残る課題", "items": ["椅子が空いた時の起動", "二重割り当ての検証", "イベント取りこぼしからの復旧"] }
+  ]
+}

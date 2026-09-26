@@ -1,0 +1,8 @@
+services:
+  nginx:
+    networks:
+      - default
+      - tunnel-net
+networks:
+  tunnel-net:
+    external: true

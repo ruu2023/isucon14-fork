@@ -106,27 +106,35 @@ export const ownerGetChairs = async (ctx: Context<Environment>) => {
   const [chairs] = await ctx.var.dbConn.query<
     Array<ChairWithDetail & RowDataPacket>
   >(
-    `SELECT id,
-       owner_id,
-       name,
-       access_token,
-       model,
-       is_active,
-       created_at,
-       updated_at,
-       IFNULL(total_distance, 0) AS total_distance,
-       total_distance_updated_at
-FROM chairs
-       LEFT JOIN (SELECT chair_id,
-                          SUM(IFNULL(distance, 0)) AS total_distance,
-                          MAX(created_at)          AS total_distance_updated_at
-                   FROM (SELECT chair_id,
-                                created_at,
-                                ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_id ORDER BY created_at)) +
-                                ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_id ORDER BY created_at)) AS distance
-                         FROM chair_locations) tmp
-                   GROUP BY chair_id) distance_table ON distance_table.chair_id = chairs.id
-WHERE owner_id = ?`,
+    `WITH owned_chairs AS (
+       SELECT *
+       FROM chairs
+       WHERE owner_id = ?
+     ),
+     distance_table AS (
+       SELECT chair_id,
+              SUM(IFNULL(distance, 0)) AS total_distance,
+              MAX(created_at)          AS total_distance_updated_at
+       FROM (SELECT chair_locations.chair_id,
+                    chair_locations.created_at,
+                    ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_locations.chair_id ORDER BY chair_locations.created_at)) +
+                    ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_locations.chair_id ORDER BY chair_locations.created_at)) AS distance
+             FROM chair_locations
+                    INNER JOIN owned_chairs ON owned_chairs.id = chair_locations.chair_id) locations_with_distance
+       GROUP BY chair_id
+     )
+SELECT owned_chairs.id,
+       owned_chairs.owner_id,
+       owned_chairs.name,
+       owned_chairs.access_token,
+       owned_chairs.model,
+       owned_chairs.is_active,
+       owned_chairs.created_at,
+       owned_chairs.updated_at,
+       IFNULL(distance_table.total_distance, 0) AS total_distance,
+       distance_table.total_distance_updated_at
+FROM owned_chairs
+       LEFT JOIN distance_table ON distance_table.chair_id = owned_chairs.id`,
     [owner.id],
   );
 

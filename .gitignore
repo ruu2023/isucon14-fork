@@ -1,2 +1,17 @@
 _tmp
 webapp/public
+
+# Local benchmark and tuning artifacts
+.autotune/
+
+# Local package-manager cache
+.pnpm-store/
+
+# Beads local database and backup artifacts
+.beads/.local_version
+.beads/last-touched
+.beads/backup/
+.beads/embeddeddolt/
+
+# Runtime Nginx logs
+development/nginx/logs/*.log
